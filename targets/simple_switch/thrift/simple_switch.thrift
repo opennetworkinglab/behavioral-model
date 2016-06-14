@@ -32,4 +32,10 @@ service SimpleSwitch {
   i32 set_egress_queue_rate(1:i32 port_num, 2:i64 rate_pps);
   i32 set_all_egress_queue_rates(1:i64 rate_pps);
 
+  oneway void packet_out(1:i32 port, 2:binary data);
+
+  i32 get_process_instance_id();
+
+  bool ping();
+
 }

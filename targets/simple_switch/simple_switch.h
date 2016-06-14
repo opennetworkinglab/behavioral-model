@@ -33,6 +33,22 @@
 #include <thread>
 #include <vector>
 
+#ifdef P4THRIFT
+#include <p4thrift/protocol/TBinaryProtocol.h>
+#include <p4thrift/transport/TSocket.h>
+#include <p4thrift/transport/TTransportUtils.h>
+
+namespace thrift_provider = p4::thrift;
+#else
+#include <thrift/protocol/TBinaryProtocol.h>
+#include <thrift/transport/TSocket.h>
+#include <thrift/transport/TTransportUtils.h>
+
+namespace thrift_provider = apache::thrift;
+#endif
+
+#include <bm/ControlPlaneService.h>
+
 // TODO(antonin)
 // experimental support for priority queueing
 // to enable it, uncomment this flag
@@ -63,6 +79,11 @@ using bm::FieldList;
 using bm::packet_id_t;
 using bm::p4object_id_t;
 
+using namespace ::thrift_provider;
+using namespace ::thrift_provider::protocol;
+using namespace ::thrift_provider::transport;
+using namespace cpservice;
+
 
 class SimpleSwitch : public Switch {
  public:
@@ -71,9 +92,20 @@ class SimpleSwitch : public Switch {
  private:
   typedef std::chrono::high_resolution_clock clock;
 
+ private:
+  // control plane service client
+  std::string cp_addr{};
+  int cp_port{};
+  boost::shared_ptr<TTransport> cp_transport{nullptr};
+  boost::shared_ptr<ControlPlaneServiceClient> cp_client{nullptr};
+  int process_instance_id{};
+  mutable boost::mutex tx_mutex{};
+
  public:
-  // by default, swapping is off
-  explicit SimpleSwitch(int max_port = 256, bool enable_swap = false);
+  // by default, swapping is on
+  explicit SimpleSwitch(int max_port = 256, bool enable_swap = true);
+
+  void init_cp_client(std::string controller_ip, uint32_t controller_port);
 
   int receive(int port_num, const char *buffer, int len) override;
 
@@ -99,6 +131,12 @@ class SimpleSwitch : public Switch {
 
   int set_egress_queue_rate(int port, const uint64_t rate_pps);
   int set_all_egress_queue_rates(const uint64_t rate_pps);
+
+  void packet_out(const int32_t port, const std::string& data);
+
+  int get_process_instance_id() {
+    return process_instance_id;
+  }
 
  private:
   static constexpr size_t nb_egress_threads = 4u;
@@ -128,6 +166,7 @@ class SimpleSwitch : public Switch {
   void ingress_thread();
   void egress_thread(size_t worker_id);
   void transmit_thread();
+  void hello_thread();
 
   int get_mirroring_mapping(mirror_id_t mirror_id) const {
     const auto it = mirroring_map.find(mirror_id);

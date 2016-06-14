@@ -27,6 +27,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <boost/thread/lock_types.hpp>
 
 #include "simple_switch.h"
 
@@ -108,6 +109,17 @@ SimpleSwitch::SimpleSwitch(int max_port, bool enable_swap)
   import_primitives();
 }
 
+void
+SimpleSwitch::init_cp_client(std::string controller_ip, uint32_t controller_port) {
+  BMLOG_DEBUG("Initializing control plane service Thrift client: addr={}, port={}...", controller_ip, controller_port);
+  cp_addr = controller_ip;
+  cp_port = controller_port;
+  auto cp_socket = boost::shared_ptr<TTransport>(new TSocket(cp_addr, cp_port));
+  cp_transport = boost::shared_ptr<TTransport>(new TBufferedTransport(cp_socket));
+  auto cp_protocol = boost::shared_ptr<TProtocol>(new TBinaryProtocol(cp_transport));
+  cp_client = boost::shared_ptr<ControlPlaneServiceClient>(new ControlPlaneServiceClient(cp_protocol));
+}
+
 int
 SimpleSwitch::receive(int port_num, const char *buffer, int len) {
   static int pkt_id = 0;
@@ -147,7 +159,21 @@ SimpleSwitch::receive(int port_num, const char *buffer, int len) {
 }
 
 void
+SimpleSwitch::packet_out(const int32_t port, const std::string& data) {
+  BMLOG_DEBUG("Received packet-out from control plane, transmitting packet of size {} out of port {}",
+              data.size(), port);
+  boost::unique_lock<boost::mutex> lock(tx_mutex);
+  transmit_fn(port, data.c_str(), data.size());
+  lock.unlock();
+}
+
+void
 SimpleSwitch::start_and_return() {
+
+  struct timeval tv;
+  gettimeofday(&tv, nullptr);
+  process_instance_id = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+
   check_queueing_metadata();
 
   std::thread t1(&SimpleSwitch::ingress_thread, this);
@@ -158,6 +184,8 @@ SimpleSwitch::start_and_return() {
   }
   std::thread t3(&SimpleSwitch::transmit_thread, this);
   t3.detach();
+  std::thread t4(&SimpleSwitch::hello_thread, this);
+  t4.detach();
 }
 
 void
@@ -196,14 +224,52 @@ SimpleSwitch::set_all_egress_queue_rates(const uint64_t rate_pps) {
 
 void
 SimpleSwitch::transmit_thread() {
+
   while (1) {
     std::unique_ptr<Packet> packet;
     output_buffer.pop_back(&packet);
     BMELOG(packet_out, *packet);
-    BMLOG_DEBUG_PKT(*packet, "Transmitting packet of size {} out of port {}",
-                    packet->get_data_size(), packet->get_egress_port());
-    transmit_fn(packet->get_egress_port(),
-                packet->data(), packet->get_data_size());
+
+    if (packet->get_egress_port() == 255) {
+      BMLOG_DEBUG("Egress port is 255, sending packet-in to control plane");
+      try {
+        if (!cp_transport->isOpen()) {
+          cp_transport->open();
+        }
+        std::string body(packet->data(), packet->get_data_size());
+        cp_client->packet_in(packet->get_ingress_port(), std::move(body));
+      } catch (TException &tx) {
+        BMLOG_DEBUG("Exception while sending packet to control plane: {}", tx.what());
+      }
+
+    } else {
+      BMLOG_DEBUG_PKT(*packet, "Transmitting packet of size {} out of port {}",
+                      packet->get_data_size(), packet->get_egress_port());
+      boost::unique_lock<boost::mutex> lock(tx_mutex);
+      transmit_fn(packet->get_egress_port(),
+                  packet->data(), packet->get_data_size());
+      lock.unlock();
+    }
+  }
+}
+
+void
+SimpleSwitch::hello_thread() {
+
+  while (1) {
+    try {
+      if (!cp_transport->isOpen()) {
+        cp_transport->open();
+      }
+      BMLOG_DEBUG("Sending hello to {}:{}: runtimePort={}, deviceId={}, instanceId={}, configMd5={}...",
+                  cp_addr, cp_port, this->get_runtime_port(), this->get_device_id(), this->get_process_instance_id(),
+                  this->get_config_md5());
+      cp_client->hello(this->get_runtime_port(), this->get_device_id(),
+                      this->get_process_instance_id(), this->get_config_md5());
+    } catch (TException &tx) {
+      BMLOG_DEBUG("Exception while sending hello: {}", tx.what());
+    }
+    sleep(5);
   }
 }
 

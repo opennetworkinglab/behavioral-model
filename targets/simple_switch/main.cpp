@@ -21,18 +21,38 @@
 /* Switch instance */
 
 #include <bm/bm_runtime/bm_runtime.h>
+#include <bm/bm_sim/target_parser.h>
 
 #include "simple_switch.h"
 
 #include "SimpleSwitch_server.ipp"
 
+using bm::TargetParserBasic;
+
 static SimpleSwitch *simple_switch;
+static TargetParserBasic *target_parser;
+
+static const std::string cp_ip_opt_name = "controller-ip";
+static const std::string cp_ip_opt_help = "ONOS-BMv2 controller IP address";
+static const std::string cp_port_opt_name = "controller-port";
+static const std::string cp_port_opt_help = "ONOS-BMv2 controller port";
 
 int
 main(int argc, char* argv[]) {
+
+  target_parser = new TargetParserBasic();
+  target_parser->add_string_option(cp_ip_opt_name, cp_ip_opt_help);
+  target_parser->add_int_option(cp_port_opt_name, cp_port_opt_help);
+
   simple_switch = new SimpleSwitch();
-  int status = simple_switch->init_from_command_line_options(argc, argv);
+  int status = simple_switch->init_from_command_line_options(argc, argv, target_parser);
   if (status != 0) std::exit(status);
+
+  std::string cp_ip;
+  int cp_port;
+  target_parser->get_string_option(cp_ip_opt_name, &cp_ip);
+  target_parser->get_int_option(cp_port_opt_name, &cp_port);
+  simple_switch->init_cp_client(cp_ip, cp_port);
 
   int thrift_port = simple_switch->get_runtime_port();
   bm_runtime::start_server(simple_switch, thrift_port);

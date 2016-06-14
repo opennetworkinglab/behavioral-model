@@ -139,6 +139,9 @@ class SwitchWContexts : public DevMgr, public RuntimeInterface {
   // Returns empty string ("") if event logger disabled
   std::string get_event_logger_addr() const;
 
+  //! Returns the device id.
+  int get_device_id() { return device_id; }
+
   //! Specify that the field is required for this target switch, i.e. the field
   //! needs to be defined in the input JSON. This function is purely meant as a
   //! safeguard and you should use it for error checking. For example, the

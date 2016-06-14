@@ -11,7 +11,13 @@ gen-cpp/bm/simple_switch_constants.h \
 gen-cpp/bm/SimpleSwitch.cpp \
 gen-cpp/bm/SimpleSwitch.h \
 gen-cpp/bm/simple_switch_types.cpp \
-gen-cpp/bm/simple_switch_types.h
+gen-cpp/bm/simple_switch_types.h \
+gen-cpp/bm/control_plane_constants.cpp \
+gen-cpp/bm/control_plane_constants.h \
+gen-cpp/bm/control_plane_types.cpp \
+gen-cpp/bm/control_plane_types.h \
+gen-cpp/bm/ControlPlaneService.cpp \
+gen-cpp/bm/ControlPlaneService.h
 
 BUILT_SOURCES = $(simple_switch_thrift_files) $(simple_switch_thrift_py_files)
 
@@ -78,18 +84,21 @@ $(simple_switch_thrift_files)
 # See http://www.gnu.org/software/automake/manual/html_node/Multiple-Outputs.html
 
 THRIFT_IDL = $(srcdir)/thrift/simple_switch.thrift
+CPSERVICE_IDL = $(srcdir)/thrift/control_plane.thrift
 
 EXTRA_DIST += $(THRIFT_IDL)
+EXTRA_DIST += $(CPSERVICE_IDL)
 
 # We copy the generated Python code to srcdir/ if we have permissions (i.e. not
 # for 'make distcheck'). This is to ensure we can run the CLI easily. Maybe I
 # will think of a better solution later.
-thrift_files.ts: $(THRIFT_IDL)
+thrift_files.ts: $(THRIFT_IDL) $(CPSERVICE_IDL)
 	@rm -f thrift_files.tmp
 	@touch thrift_files.tmp
 	@mkdir -p $(builddir)/gen-cpp/bm
 	$(THRIFT) -out $(builddir)/gen-cpp/bm --gen cpp -r $(THRIFT_IDL)
 	$(THRIFT) -o $(builddir) --gen py -r $(THRIFT_IDL)
+	$(THRIFT) -out $(builddir)/gen-cpp/bm --gen cpp -r $(CPSERVICE_IDL)
 	if mkdir $(srcdir)/sswitch_runtime.test 2>/dev/null; then \
 	  rm -rf $(srcdir)/sswitch_runtime/; \
 	  cp -r $(builddir)/gen-py/sswitch_runtime/ $(srcdir)/; \
@@ -119,12 +128,16 @@ $(BUILT_SOURCES): thrift_files.ts
 nodist_pkginclude_HEADERS = \
 gen-cpp/bm/simple_switch_constants.h \
 gen-cpp/bm/SimpleSwitch.h \
-gen-cpp/bm/simple_switch_types.h
+gen-cpp/bm/simple_switch_types.h \
+gen-cpp/bm/control_plane_constants.h \
+gen-cpp/bm/ControlPlaneService.h \
+gen-cpp/bm/control_plane_types.h
 
 
 CLEANFILES = $(BUILT_SOURCES) \
 thrift_files.ts \
 gen-cpp/bm/SimpleSwitch_server.skeleton.cpp \
+gen-cpp/bm/ControlPlaneService_server.skeleton.cpp \
 $(bin_SCRIPTS)
 
 # I used to do a rm on gen-cpp, but it was removing a .deps directory, instead I

@@ -73,6 +73,20 @@ class SimpleSwitchHandler : virtual public SimpleSwitchIf {
     return switch_->set_all_egress_queue_rates(static_cast<uint64_t>(rate_pps));
   }
 
+  void packet_out(const int32_t port, const std::string& data) {
+    bm::Logger::get()->trace("packet_out");
+    return switch_->packet_out(port, data);
+  }
+
+  int get_process_instance_id() {
+    bm::Logger::get()->trace("get_process_instance_id");
+    return switch_->get_process_instance_id();
+  }
+
+  bool ping() {
+    return true;
+  }
+
 private:
   SimpleSwitch *switch_;
 };
