@@ -127,6 +127,7 @@ SimpleSwitch::receive(int port_num, const char *buffer, int len) {
   // this is a good place to call this, because blocking this thread will not
   // block the processing of existing packet instances, which is a requirement
   if (do_swap() == 0) {
+    do_hello();
     check_queueing_metadata();
   }
 
@@ -165,6 +166,15 @@ SimpleSwitch::packet_out(const int32_t port, const std::string& data) {
   boost::unique_lock<boost::mutex> lock(tx_mutex);
   transmit_fn(port, data.c_str(), data.size());
   lock.unlock();
+}
+
+void
+SimpleSwitch::force_swap() {
+  BMLOG_DEBUG("Forcing configuration swap...");
+  if (do_swap() == 0) {
+    do_hello();
+    check_queueing_metadata();
+  }
 }
 
 void
@@ -254,21 +264,25 @@ SimpleSwitch::transmit_thread() {
 }
 
 void
-SimpleSwitch::hello_thread() {
-
-  while (1) {
-    try {
-      if (!cp_transport->isOpen()) {
-        cp_transport->open();
-      }
-      BMLOG_DEBUG("Sending hello to {}:{}: runtimePort={}, deviceId={}, instanceId={}, configMd5={}...",
-                  cp_addr, cp_port, this->get_runtime_port(), this->get_device_id(), this->get_process_instance_id(),
-                  this->get_config_md5());
-      cp_client->hello(this->get_runtime_port(), this->get_device_id(),
-                      this->get_process_instance_id(), this->get_config_md5());
-    } catch (TException &tx) {
-      BMLOG_DEBUG("Exception while sending hello: {}", tx.what());
+SimpleSwitch::do_hello() {
+  try {
+    if (!cp_transport->isOpen()) {
+      cp_transport->open();
     }
+    BMLOG_DEBUG("Sending hello to {}:{}: runtimePort={}, deviceId={}, instanceId={}, configMd5={}...",
+                cp_addr, cp_port, this->get_runtime_port(), this->get_device_id(), this->get_process_instance_id(),
+                this->get_config_md5());
+    cp_client->hello(this->get_runtime_port(), this->get_device_id(),
+                    this->get_process_instance_id(), this->get_config_md5());
+  } catch (TException &tx) {
+    BMLOG_DEBUG("Exception while sending hello: {}", tx.what());
+  }
+}
+
+void
+SimpleSwitch::hello_thread() {
+  while (1) {
+    do_hello();
     sleep(5);
   }
 }

@@ -137,6 +137,8 @@ class SimpleSwitch : public Switch {
   int get_process_instance_id() {
     return process_instance_id;
   }
+  void do_hello();
+  void force_swap();
 
  private:
   static constexpr size_t nb_egress_threads = 4u;

@@ -38,4 +38,6 @@ service SimpleSwitch {
 
   bool ping();
 
+  oneway void force_swap();
+
 }

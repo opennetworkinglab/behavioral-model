@@ -87,6 +87,11 @@ class SimpleSwitchHandler : virtual public SimpleSwitchIf {
     return true;
   }
 
+  void force_swap() {
+    bm::Logger::get()->trace("force_swap");
+    return switch_->force_swap();
+  }
+
 private:
   SimpleSwitch *switch_;
 };
