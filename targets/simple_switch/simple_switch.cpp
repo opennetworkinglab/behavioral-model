@@ -115,7 +115,7 @@ SimpleSwitch::init_cp_client(std::string controller_ip, uint32_t controller_port
   cp_addr = controller_ip;
   cp_port = controller_port;
   auto cp_socket = boost::shared_ptr<TTransport>(new TSocket(cp_addr, cp_port));
-  cp_transport = boost::shared_ptr<TTransport>(new TBufferedTransport(cp_socket));
+  cp_transport = boost::shared_ptr<TTransport>(new TFramedTransport(cp_socket));
   auto cp_protocol = boost::shared_ptr<TProtocol>(new TBinaryProtocol(cp_transport));
   cp_client = boost::shared_ptr<ControlPlaneServiceClient>(new ControlPlaneServiceClient(cp_protocol));
 }
@@ -247,7 +247,7 @@ SimpleSwitch::transmit_thread() {
           cp_transport->open();
         }
         std::string body(packet->data(), packet->get_data_size());
-        cp_client->packet_in(packet->get_ingress_port(), std::move(body));
+        cp_client->packet_in(packet->get_ingress_port(), std::move(body), body.size());
       } catch (TException &tx) {
         BMLOG_DEBUG("Exception while sending packet to control plane: {}", tx.what());
       }
